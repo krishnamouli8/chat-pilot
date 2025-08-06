@@ -60,6 +60,22 @@ def on_message(client, userdata, msg):
                 print(f"[Error] Unknown location names: {start_loc_name} or {end_loc_name}")
         else:
             print(f"[Error] Invalid NAVIGATE command format: {command_str}")
+    elif command_str == "FORWARD":
+        print("[System] Received command: FORWARD")
+        path = [] # Clear path to prioritize manual control
+        motor_control(FORWARD_SPEED, FORWARD_SPEED)
+    elif command_str == "LEFT":
+        print("[System] Received command: LEFT")
+        path = [] # Clear path to prioritize manual control
+        motor_control(-TURN_SPEED, TURN_SPEED) # Negative left speed for turning left
+    elif command_str == "RIGHT":
+        print("[System] Received command: RIGHT")
+        path = [] # Clear path to prioritize manual control
+        motor_control(TURN_SPEED, -TURN_SPEED) # Negative right speed for turning right
+    elif command_str == "STOP":
+        print("[System] Received command: STOP")
+        path = [] # Clear path to prioritize manual control
+        motor_control(0, 0)
     else:
         # Handle other commands if necessary
         print(f"[System] Other command received: {command_str}")
@@ -253,9 +269,8 @@ def main():
         # Main loop to continuously check for navigation commands or execute existing path
         while True:
             if path: # If a path is set (e.g., from an MQTT command)
-                start_point_coords = path[0]
-                end_point_coords = path[-1]
-                print(f"[System] Navigating from {start_point_coords} to {end_point_coords}")
+                # Print the path being traveled
+                print(f"[System] Traversing path: {path}") 
 
                 for index, x in enumerate(path):
                     target_location = LocationGlobalRelative(x[0], x[1], ALTITUDE)

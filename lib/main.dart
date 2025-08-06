@@ -219,8 +219,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         You are the command interpreter for an autonomous rover.
         Analyze the following user text and extract a command and any relevant parameters.
         Respond ONLY with a JSON object.
-        The JSON should have "command" (e.g., "move", "turn", "stop", "status", "scan", "navigate"), "parameters", and "original_command".
+        The JSON should have "command" (e.g., "move", "turn", "stop", "status", "scan", "navigate", "forward", "left", "right"), "parameters", and "original_command".
         For "navigate", the parameters should be "start_location" and "end_location" (e.g., "A", "B").
+        For "forward", "left", "right", and "stop" commands, the parameters field should be an empty object.
+        Example for "forward": {"responseType": "command", "command": "forward", "parameters": {}}
+        Example for "left": {"responseType": "command", "command": "left", "parameters": {}}
+        Example for "right": {"responseType": "command", "command": "right", "parameters": {}}
+        Example for "stop": {"responseType": "command", "command": "stop", "parameters": {}}
         If you cannot determine a valid command, respond with {"command": "unknown", "parameters": {}, "original_command": "$text"}.
         User text: "$text"
       ''';
@@ -244,7 +249,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           final String mqttCommand = "NAVIGATE:$start,$end";
           _mqttService.publish(mqttCommand);
           confirmationText = "Sending navigation command to rover: from $start to $end.";
-        } else {
+        } else if (command == 'forward') {
+          _mqttService.publish("FORWARD");
+          confirmationText = "Command received: Moving forward.";
+        } else if (command == 'left') {
+          _mqttService.publish("LEFT");
+          confirmationText = "Command received: Turning left.";
+        } else if (command == 'right') {
+          _mqttService.publish("RIGHT");
+          confirmationText = "Command received: Turning right.";
+        } else if (command == 'stop') {
+          _mqttService.publish("STOP");
+          confirmationText = "Command received: Stopping rover.";
+        }
+        else {
           // --- MQTT PUBLISH for other commands ---
           // Send the original, human-readable command to the rover.
           // The rover's Jetson Nano will be responsible for parsing this.
