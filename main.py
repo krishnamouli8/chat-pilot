@@ -17,8 +17,8 @@ MIN_DISTANCE = 500  # mm (obstacle avoidance threshold)
 ALTITUDE = 0.0    
 WAYPOINT_REACHED_RADIUS = 1      # For rovers, altitude is 0
 FILE_NAME = "cords.txt" # Changed to cords.txt
-TURN_SPEED = 30
-FORWARD_SPEED = 40
+TURN_SPEED = 40
+FORWARD_SPEED = 50
 
 arrived = False
 latest_scan = None  # Global Lidar scan storage
