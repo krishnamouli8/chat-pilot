@@ -1,185 +1,300 @@
 from dronekit import connect, VehicleMode, LocationGlobalRelative
 from rplidar import RPLidar
-from pymavlink import mavutil
 import math
 import time
 import threading
+import serial
 import json
-import paho.mqtt.client as mqtt
+import paho.mqtt.client as mqtt # Import MQTT library
 
 # =================== CONSTANTS ===================
-PIXHAWK_PORT = "tcp:192.168.80.1:5762"
+LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
+PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
+DDSM_PORT = '/dev/ttyACM0'
+SERIAL_BAUDRATE = 115200
 BAUDRATE = 57600
-MIN_DISTANCE = 500  # mm obstacle threshold
+MIN_DISTANCE = 500  # mm (obstacle avoidance threshold)
 ALTITUDE = 0.0    
-WAYPOINT_REACHED_RADIUS = 1
-FILE_NAME = "cords.txt"
+WAYPOINT_REACHED_RADIUS = 1      # For rovers, altitude is 0
+FILE_NAME = "cords.txt" # Changed to cords.txt
+TURN_SPEED = 30
+FORWARD_SPEED = 40
 
-# Manual control variables
-manual_mode = False
-manual_command = None
-
-# Lidar storage
-latest_scan = None
-location_map = {}
+arrived = False
+latest_scan = None  # Global Lidar scan storage
+latest_servo1_value = None
+latest_servo3_value = None
 path = []
+location_map = {} # Dictionary to store named locations
+
+ddsm_ser = serial.Serial(DDSM_PORT, baudrate=SERIAL_BAUDRATE)
+ddsm_ser.setRTS(False)
+ddsm_ser.setDTR(False)
+print("[System] DDSM Connected")
 
 # =================== MQTT Callbacks ===================
 def on_connect(client, userdata, flags, rc):
-    print(f"[MQTT] Connected with result code {rc}")
-    client.subscribe("rover/command")
+    print(f"MQTT_CLIENT::Connected with result code {rc}")
+    client.subscribe("rover/command") # Subscribe to the command topic
 
 def on_message(client, userdata, msg):
-    global path, manual_mode, manual_command
-    command_str = msg.payload.decode().strip()
-    print(f"[MQTT] Received command: {command_str}")
+    global path
+    command_str = msg.payload.decode()
+    print(f"MQTT_CLIENT::Received command: {command_str}")
 
     if command_str.startswith("NAVIGATE:"):
+        # Parse navigation command: NAVIGATE:A,C
         parts = command_str.split(":")[1].split(",")
         if len(parts) == 2:
-            start = parts[0].strip()
-            end = parts[1].strip()
-            if start in location_map and end in location_map:
-                path = [location_map[start], location_map[end]]
-                manual_mode = False
-                manual_command = None
+            start_loc_name = parts[0].strip()
+            end_loc_name = parts[1].strip()
+
+            if start_loc_name in location_map and end_loc_name in location_map:
+                # For simplicity, let's assume a direct path for now.
+                # In a real scenario, you'd calculate a path between these points.
+                path = [location_map[start_loc_name], location_map[end_loc_name]]
+                print(f"[System] Navigation command received: from {start_loc_name} to {end_loc_name}")
+                # You might want to trigger the navigation loop here or set a flag
+                # For this example, we'll let the main loop pick it up.
             else:
-                print(f"[Error] Unknown locations: {start}, {end}")
+                print(f"[Error] Unknown location names: {start_loc_name} or {end_loc_name}")
         else:
-            print(f"[Error] Invalid NAVIGATE command: {command_str}")
-
-    elif command_str in ["FORWARD", "LEFT", "RIGHT"]:
-        manual_mode = True
-        manual_command = command_str
-
+            print(f"[Error] Invalid NAVIGATE command format: {command_str}")
+    elif command_str == "FORWARD":
+        print("[System] Received command: FORWARD")
+        path = [] # Clear path to prioritize manual control
+        motor_control(FORWARD_SPEED, FORWARD_SPEED)
+    elif command_str == "LEFT":
+        print("[System] Received command: LEFT")
+        path = [] # Clear path to prioritize manual control
+        motor_control(-TURN_SPEED, TURN_SPEED) # Negative left speed for turning left
+    elif command_str == "RIGHT":
+        print("[System] Received command: RIGHT")
+        path = [] # Clear path to prioritize manual control
+        motor_control(TURN_SPEED, -TURN_SPEED) # Negative right speed for turning right
     elif command_str == "STOP":
-        manual_mode = False
-        manual_command = None
+        print("[System] Received command: STOP")
+        path = [] # Clear path to prioritize manual control
+        motor_control(0, 0)
+    else:
+        # Handle other commands if necessary
+        print(f"[System] Other command received: {command_str}")
 
 # =================== FUNCTIONS ===================
+
 def read_coordinates_from_file(filename):
-    with open(filename, 'r') as f:
-        for line in f:
-            line = line.strip().replace(" ", "")
-            if not line:
-                continue
-            try:
-                name, coords = line.split(':')
-                lat, lon = coords.split(',')[:2]
-                location_map[name] = (float(lat), float(lon))
-            except Exception as e:
-                print(f"[Error] Skipping line: {line} ({e})")
+    coordinates = []
+    with open(filename, 'r') as file:
+        for line in file:
+            line = line.replace(" ", "").strip()
+            if line:
+                try:
+                    name, coords_str = line.split(':')
+                    parts = coords_str.strip().split(',')
+                    if len(parts) >= 2:
+                        lat = float(parts[0])
+                        lon = float(parts[1])
+                        location_map[name.strip()] = (lat, lon) # Store with name
+                        coordinates.append((lat, lon))
+                except ValueError as e:
+                    print(f"Skipping invalid line: {line} - Error: {e}")
+    return coordinates
 
 def get_haversine_distance(lat1, lon1, lat2, lon2):
-    R = 6371000
+    """Calculate distance between two GPS coordinates in meters"""
+    R = 6371000  # Radius of Earth in meters
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
     d_phi = math.radians(lat2 - lat1)
     d_lambda = math.radians(lon2 - lon1)
-    a = math.sin(d_phi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
     return R * c
 
 def lidar_thread_func(lidar):
+    """Lidar scanning in a background thread"""
     global latest_scan
     for scan in lidar.iter_scans():
         latest_scan = scan
 
 def is_front_clear():
-    if latest_scan is None:
-        return True
-    for (_, angle, dist) in latest_scan:
+    global latest_scan
+    scan_data = latest_scan
+    if scan_data is None:
+        return True # Assume clear if no lidar data
+    for (_, angle, dist) in scan_data:
         if (angle >= 340 or angle <= 20) and dist < MIN_DISTANCE and dist > 0:
             return False
     return True
 
-def send_velocity(vehicle, vx, vy, vz):
-    msg = vehicle.message_factory.set_position_target_local_ned_encode(
-        0, 0, 0,
-        mavutil.mavlink.MAV_FRAME_BODY_NED,
-        0b0000111111000111,  # only velocity
-        0, 0, 0,
-        vx, vy, vz,
-        0, 0, 0,
-        0, 0
-    )
-    vehicle.send_mavlink(msg)
-    vehicle.flush()
+def is_left_clear():
+    global latest_scan
+    scan_data = latest_scan
+    if scan_data is None:
+        return True # Assume clear if no lidar data
+    for (_, angle, dist) in scan_data:
+        if (angle >= 270 or angle <= 340) and dist < MIN_DISTANCE+100 and dist > 0:
+            return False
+    return True
+
+def scale_servo_to_speed(servo_value):
+    if servo_value is None:
+        return 0
+    # Map servo PWM (1000-2000 µs) to speed (-100 to 100)
+    return int((servo_value - 1500) / 500 * 100)
+
+def avoid_obstacle():   
+    """Perform an obstacle avoidance maneuver"""
+    motor_control(0,0) # stop 
+    time.sleep(0.3)
+    while not is_front_clear():
+        print("[OBSTACLE DETECTED] Avoiding...")
+        motor_control(20,-20) # turn right
+        time.sleep(0.5)
+
+    motor_control(20 , 20) # move forward
+    time.sleep(1.5)
+
+def follow_obstacle():
+    while True:
+        if not is_front_clear():
+            motor_control(TURN_SPEED, -TURN_SPEED)
+            print("[OBSTACLE DETECTED] -> turn right")
+        elif not is_left_clear():
+            motor_control(FORWARD_SPEED, FORWARD_SPEED)
+            print("[OBSTACLE DETECTED] -> move forward")
+        else:
+            break
 
 def goto_position(vehicle, target_location):
-    print(f"[Nav] Going to {target_location.lat}, {target_location.lon}")
+    global  latest_servo1_value, latest_servo3_value
+    print(f"[Navigation] Moving to target: {target_location.lat}, {target_location.lon}")
     vehicle.simple_goto(target_location)
+
     while True:
-        cur = vehicle.location.global_relative_frame
-        dist = get_haversine_distance(cur.lat, cur.lon, target_location.lat, target_location.lon)
-        print(f"[Nav] Distance: {dist:.2f} m")
-        if dist <= WAYPOINT_REACHED_RADIUS:
-            print("[Nav] Target reached.")
+        current_location = vehicle.location.global_relative_frame
+        dist_to_target = get_haversine_distance(current_location.lat, current_location.lon , target_location.lat, target_location.lon)
+        print(f"[Navigation] Distance to target: {dist_to_target:.2f} meters")
+
+        if dist_to_target <= WAYPOINT_REACHED_RADIUS : # Arrived
+            print("[Navigation] Target Reached!")
             break
-        if not is_front_clear():
-            print("[Obstacle] Stopping to avoid collision.")
-            send_velocity(vehicle, 0, 0, 0)
-            while not is_front_clear():
-                time.sleep(0.1)
-            print("[Obstacle] Path clear. Resuming.")
-            vehicle.simple_goto(target_location)
+
+        if  not is_front_clear():
+            print("[Warning] Obstacle detected ahead!")
+            follow_obstacle()
+            # avoid_obstacle()  # perform avoidance
+
+        servo1 = latest_servo1_value
+        servo3 = latest_servo3_value
+        speed_left = scale_servo_to_speed(servo1)
+        speed_right = scale_servo_to_speed(servo3)
+        motor_control(speed_left, speed_right)
         time.sleep(0.1)
 
-# =================== MAIN ===================
-def main():
-    global manual_mode, manual_command, path
+def motor_control(left, right):
+    global ddsm_ser
+    command_right = {
+        "T": 10010,
+        "id": 2,
+        "cmd": -right,  # reverse polarity for right wheel
+        "act": 3
+    }
+    command_left = {
+        "T": 10010,
+        "id": 1,
+        "cmd": left,
+        "act": 3
+    }
+    ddsm_ser.write((json.dumps(command_right) + '\n').encode())
+    time.sleep(0.01)
+    ddsm_ser.write((json.dumps(command_left) + '\n').encode())
 
-    # MQTT Setup
+# =================== MAIN ===================
+
+def main():
+    global latest_scan, path, location_map
+
+    # Initialize MQTT Client
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("test.mosquitto.org", 1883, 60)
-    client.loop_start()
+    client.connect("test.mosquitto.org", 1883, 60) # Connect to public broker
+    client.loop_start() # Start MQTT loop in background thread
 
-    read_coordinates_from_file(FILE_NAME)
-    print(f"[System] Locations loaded: {location_map.keys()}")
+    read_coordinates_from_file(FILE_NAME) # Populate location_map
+    print(f"[System] Loaded named locations: {location_map.keys()}")
+
+    print("[System] Starting LIDAR...")
+    lidar = RPLidar(LIDAR_PORT)
+    threading.Thread(target=lidar_thread_func, args=(lidar,), daemon=True).start()
+    while True:
+        if latest_scan is None:
+            print("Waiting for LIDAR data...")
+            time.sleep(1)
+            continue 
+        else:
+            print("Lidar started...")
+            break
 
     print("[System] Connecting to Pixhawk...")
     vehicle = connect(PIXHAWK_PORT, baud=BAUDRATE, wait_ready=False)
-    print("[System] Connected.")
+    print("[System] Connection success...")
+    # threading.Thread(target=input_listener, daemon=True).start()
 
-    print("[System] Arming...")
+    @vehicle.on_message('SERVO_OUTPUT_RAW')
+    def servo_listener(self, name, message):
+        global latest_servo1_value, latest_servo3_value
+        latest_servo1_value = message.servo1_raw
+        latest_servo3_value = message.servo3_raw
+        # print(f"[SERVO] Servo1: {latest_servo1_value}, Servo3: {latest_servo3_value}")
+          
+    print("[System] Arming vehicle...")
     vehicle.armed = True
     while not vehicle.armed:
         print("[System] Waiting for arming...")
         time.sleep(1)
+    print("[System] Vehicle Armed.")
 
     print("[System] Setting GUIDED mode...")
     vehicle.mode = VehicleMode("GUIDED")
     while vehicle.mode.name != "GUIDED":
+        print("[System] Waiting for GUIDED mode...")
         time.sleep(1)
+    print(f"[System] Vehicle Mode --> {vehicle.mode.name}")
 
     try:
+        # Main loop to continuously check for navigation commands or execute existing path
         while True:
-            if manual_mode:
-                if manual_command == "FORWARD":
-                    send_velocity(vehicle, 1.0, 0, 0)
-                elif manual_command == "LEFT":
-                    send_velocity(vehicle, 0, -0.5, 0)
-                elif manual_command == "RIGHT":
-                    send_velocity(vehicle, 0, 0.5, 0)
-            else:
-                send_velocity(vehicle, 0, 0, 0)  # stop when not in manual mode
-                if path:
-                    for lat, lon in path:
-                        target = LocationGlobalRelative(lat, lon, ALTITUDE)
-                        goto_position(vehicle, target)
-                    path = []
+            if path: # If a path is set (e.g., from an MQTT command)
+                # Print the path being traveled
+                print(f"[System] Traversing path: {path}") 
 
-            time.sleep(0.1)
+                for index, x in enumerate(path):
+                    target_location = LocationGlobalRelative(x[0], x[1], ALTITUDE)
+                    goto_position(vehicle, target_location)
+                    print(f"[System] Reached waypoint {index+1} --> {x[0]}, {x[1]}")
+                    time.sleep(0.5)
+                print("[System] Reached destination")
+                motor_control(0,0)
+                path = [] # Clear the path after completion
+            time.sleep(1) # Small delay to prevent busy-waiting
 
     except KeyboardInterrupt:
-        print("[System] Interrupted. Stopping...")
-        send_velocity(vehicle, 0, 0, 0)
+        print("[System] Stopping test...")
+        motor_control(0,0)
 
     finally:
+        vehicle.channels.overrides = {}
+        # vehicle.armed = False
         vehicle.close()
-        client.loop_stop()
+        lidar.stop()
+        lidar.stop_motor()
+        lidar.disconnect()
+        ddsm_ser.close()
+        client.loop_stop() # Stop MQTT loop
         client.disconnect()
 
 if __name__ == "__main__":
