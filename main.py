@@ -38,7 +38,7 @@ def on_connect(client, userdata, flags, rc):
     print(f"MQTT_CLIENT::Connected with result code {rc}")
     client.subscribe("rover/command") # Subscribe to the command topic
 
-def on_message(client, userdata, msg):
+def on_message(client, userdata, msg, vehicle):
     global path
     command_str = msg.payload.decode()
     print(f"MQTT_CLIENT::Received command: {command_str}")
@@ -55,6 +55,7 @@ def on_message(client, userdata, msg):
                 # In a real scenario, you'd calculate a path between these points.
                 path = [location_map[start_loc_name], location_map[end_loc_name]]
                 print(f"[System] Navigation command received: from {start_loc_name} to {end_loc_name}")
+                vehicle.simple_goto()
                 # You might want to trigger the navigation loop here or set a flag
                 # For this example, we'll let the main loop pick it up.
             else:
