@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt # Import MQTT library
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
 # PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
-PIXHAWK_PORT = "tcp:127.0.0.1:5762"
+PIXHAWK_PORT = "tcp:192.168.80.1:5762"
 DDSM_PORT = '/dev/ttyACM0'
 SERIAL_BAUDRATE = 115200
 BAUDRATE = 57600
