@@ -9,7 +9,8 @@ import paho.mqtt.client as mqtt # Import MQTT library
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
-PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
+# PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
+PIXHAWK_PORT = "127.0.0.1:5761"
 DDSM_PORT = '/dev/ttyACM0'
 SERIAL_BAUDRATE = 115200
 BAUDRATE = 57600
@@ -27,10 +28,10 @@ latest_servo3_value = None
 path = []
 location_map = {} # Dictionary to store named locations
 
-ddsm_ser = serial.Serial(DDSM_PORT, baudrate=SERIAL_BAUDRATE)
-ddsm_ser.setRTS(False)
-ddsm_ser.setDTR(False)
-print("[System] DDSM Connected")
+# ddsm_ser = serial.Serial(DDSM_PORT, baudrate=SERIAL_BAUDRATE)
+# ddsm_ser.setRTS(False)
+# ddsm_ser.setDTR(False)
+# print("[System] DDSM Connected")
 
 # =================== MQTT Callbacks ===================
 def on_connect(client, userdata, flags, rc):
@@ -227,17 +228,17 @@ def main():
     read_coordinates_from_file(FILE_NAME) # Populate location_map
     print(f"[System] Loaded named locations: {location_map.keys()}")
 
-    print("[System] Starting LIDAR...")
-    lidar = RPLidar(LIDAR_PORT)
-    threading.Thread(target=lidar_thread_func, args=(lidar,), daemon=True).start()
-    while True:
-        if latest_scan is None:
-            print("Waiting for LIDAR data...")
-            time.sleep(1)
-            continue 
-        else:
-            print("Lidar started...")
-            break
+    # print("[System] Starting LIDAR...")
+    # lidar = RPLidar(LIDAR_PORT)
+    # threading.Thread(target=lidar_thread_func, args=(lidar,), daemon=True).start()
+    # while True:
+    #     if latest_scan is None:
+    #         print("Waiting for LIDAR data...")
+    #         time.sleep(1)
+    #         continue 
+    #     else:
+    #         print("Lidar started...")
+    #         break
 
     print("[System] Connecting to Pixhawk...")
     vehicle = connect(PIXHAWK_PORT, baud=BAUDRATE, wait_ready=False)
@@ -290,10 +291,10 @@ def main():
         vehicle.channels.overrides = {}
         # vehicle.armed = False
         vehicle.close()
-        lidar.stop()
-        lidar.stop_motor()
-        lidar.disconnect()
-        ddsm_ser.close()
+        # lidar.stop()
+        # lidar.stop_motor()
+        # lidar.disconnect()
+        # ddsm_ser.close()
         client.loop_stop() # Stop MQTT loop
         client.disconnect()
 
