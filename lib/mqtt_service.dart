@@ -14,7 +14,7 @@ class MqttService {
   late MqttServerClient _client;
 
   // --- Configuration ---
-  final String _server = 'broker.hivemq.com'; // Public broker for testing
+  final String _server = 'test.mosquitto.org'; // Public broker for testing
   final int _port = 1883;
   final String _topic = 'rover/command'; // Topic to publish commands to
   
