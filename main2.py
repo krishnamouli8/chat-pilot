@@ -9,8 +9,8 @@ import paho.mqtt.client as mqtt # Import MQTT library
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
-# PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
-PIXHAWK_PORT = "tcp:192.168.80.1:5762"
+PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
+# PIXHAWK_PORT = "tcp:192.168.80.1:5762"
 DDSM_PORT = '/dev/ttyACM0'
 SERIAL_BAUDRATE = 115200
 BAUDRATE = 57600
@@ -223,7 +223,7 @@ def main():
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("test.mosquitto.org", 1883, 60) # Connect to public broker
+    client.connect("broker.hivemq.com", 1883, 60) # Connect to public broker
     client.loop_start() # Start MQTT loop in background thread
 
     read_coordinates_from_file(FILE_NAME) # Populate location_map
@@ -262,9 +262,9 @@ def main():
 
     print("[System] Setting GUIDED mode...")
     vehicle.mode = VehicleMode("GUIDED")
-    while vehicle.mode.name != "GUIDED":
-        print("[System] Waiting for GUIDED mode...")
-        time.sleep(1)
+    # while vehicle.mode.name != "GUIDED":
+    #     print("[System] Waiting for GUIDED mode...")
+    #     time.sleep(1)
     print(f"[System] Vehicle Mode --> {vehicle.mode.name}")
 
     try:
