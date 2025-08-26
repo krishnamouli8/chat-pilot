@@ -9,9 +9,9 @@ import paho.mqtt.client as mqtt # Import MQTT library
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
-# PIXHAWK_PORT = '/dev/ttyACM1'   # Pixhawk serial port
-PIXHAWK_PORT = "tcp:192.168.80.1:5762"
-DDSM_PORT = '/dev/ttyACM0'
+PIXHAWK_PORT = '/dev/ttyACM0'   # Pixhawk serial port
+# PIXHAWK_PORT = "tcp:192.168.80.1:5762"
+DDSM_PORT = '/dev/ttyACM1'
 SERIAL_BAUDRATE = 115200
 BAUDRATE = 57600
 MIN_DISTANCE = 500  # mm (obstacle avoidance threshold)
@@ -70,11 +70,11 @@ def on_message(client, userdata, msg):
     elif command_str == "LEFT":
         print("[System] Received command: LEFT")
         path = [] # Clear path to prioritize manual control
-        motor_control(-TURN_SPEED, TURN_SPEED) # Negative left speed for turning left
+        motor_control(30, 40) # Negative left speed for turning left
     elif command_str == "RIGHT":
         print("[System] Received command: RIGHT")
         path = [] # Clear path to prioritize manual control
-        motor_control(TURN_SPEED, -TURN_SPEED) # Negative right speed for turning right
+        motor_control(40, 30) # Negative right speed for turning right
     elif command_str == "STOP":
         print("[System] Received command: STOP")
         path = [] # Clear path to prioritize manual control
