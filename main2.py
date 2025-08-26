@@ -21,6 +21,7 @@ FILE_NAME = "cords.txt" # Changed to cords.txt
 TURN_SPEED = 30
 FORWARD_SPEED = 40
 
+vehicle = None
 arrived = False
 latest_scan = None  # Global Lidar scan storage
 latest_servo1_value = None
@@ -28,18 +29,18 @@ latest_servo3_value = None
 path = []
 location_map = {} # Dictionary to store named locations
 
-# ddsm_ser = serial.Serial(DDSM_PORT, baudrate=SERIAL_BAUDRATE)
-# ddsm_ser.setRTS(False)
-# ddsm_ser.setDTR(False)
-# print("[System] DDSM Connected")
+ddsm_ser = serial.Serial(DDSM_PORT, baudrate=SERIAL_BAUDRATE)
+ddsm_ser.setRTS(False)
+ddsm_ser.setDTR(False)
+print("[System] DDSM Connected")
 
 # =================== MQTT Callbacks ===================
 def on_connect(client, userdata, flags, rc):
     print(f"MQTT_CLIENT::Connected with result code {rc}")
-    client.subscribe("rover/command") # Subscribe to the command topic
+    client.subscribe("chatpilot/rover/command") # Subscribe to the command topic
 
-def on_message(client, userdata, msg, vehicle):
-    global path
+def on_message(client, userdata, msg):
+    global path, vehicle
     command_str = msg.payload.decode()
     print(f"MQTT_CLIENT::Received command: {command_str}")
 
@@ -217,13 +218,13 @@ def motor_control(left, right):
 # =================== MAIN ===================
 
 def main():
-    global latest_scan, path, location_map
+    global latest_scan, path, location_map, vehicle
 
     # Initialize MQTT Client
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("test.mosquitto.org", 1883, 60) # Connect to public broker
+    client.connect("13.232.191.178", 1883, 60) # Connect to public broker
     client.loop_start() # Start MQTT loop in background thread
 
     read_coordinates_from_file(FILE_NAME) # Populate location_map
@@ -290,7 +291,7 @@ def main():
 
     finally:
         vehicle.channels.overrides = {}
-        # vehicle.armed = False
+        vehicle.armed = False
         vehicle.close()
         # lidar.stop()
         # lidar.stop_motor()

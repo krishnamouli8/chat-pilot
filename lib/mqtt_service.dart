@@ -14,9 +14,9 @@ class MqttService {
   late MqttServerClient _client;
 
   // --- Configuration ---
-  final String _server = 'test.mosquitto.org'; // Public broker for testing
+  final String _server = '13.232.191.178'; // Public broker for testing
   final int _port = 1883;
-  final String _topic = 'rover/command'; // Topic to publish commands to
+  final String _topic = 'chatpilot/rover/command'; // Topic to publish commands to
   
   // A unique client ID for the connection
   final String _clientIdentifier = 'flutter_rover_app_${DateTime.now().millisecondsSinceEpoch}';
