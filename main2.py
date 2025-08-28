@@ -6,6 +6,7 @@ import threading
 import serial
 import json
 import paho.mqtt.client as mqtt # Import MQTT library
+from playaudio import play_sound
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
@@ -20,6 +21,10 @@ WAYPOINT_REACHED_RADIUS = 1      # For rovers, altitude is 0
 FILE_NAME = "cords.txt" # Changed to cords.txt
 TURN_SPEED = 30
 FORWARD_SPEED = 40
+forward_sound = "moveforward.wav"
+stop_sound = "stop.wav"
+left_sound = "left.wav"
+right_sound = "right.wav"
 
 vehicle = None
 arrived = False
@@ -66,17 +71,21 @@ def on_message(client, userdata, msg):
     elif command_str == "FORWARD":
         print("[System] Received command: FORWARD")
         path = [] # Clear path to prioritize manual control
+        play_sound(forward_sound)
         motor_control(FORWARD_SPEED, FORWARD_SPEED)
     elif command_str == "LEFT":
         print("[System] Received command: LEFT")
         path = [] # Clear path to prioritize manual control
+        play_sound(left_sound)
         motor_control(30, 40) # Negative left speed for turning left
     elif command_str == "RIGHT":
         print("[System] Received command: RIGHT")
         path = [] # Clear path to prioritize manual control
+        play_sound(right_sound)
         motor_control(40, 30) # Negative right speed for turning right
     elif command_str == "STOP":
         print("[System] Received command: STOP")
+        play_sound(stop_sound)
         path = [] # Clear path to prioritize manual control
         motor_control(0, 0)
     else:
@@ -263,9 +272,9 @@ def main():
 
     print("[System] Setting GUIDED mode...")
     vehicle.mode = VehicleMode("GUIDED")
-    while vehicle.mode.name != "GUIDED":
-        print("[System] Waiting for GUIDED mode...")
-        time.sleep(1)
+    # while vehicle.mode.name != "GUIDED":
+    #     print("[System] Waiting for GUIDED mode...")
+    #     time.sleep(1)
     print(f"[System] Vehicle Mode --> {vehicle.mode.name}")
 
     try:
