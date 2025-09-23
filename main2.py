@@ -7,6 +7,7 @@ import serial
 import json
 import paho.mqtt.client as mqtt # Import MQTT library
 from playaudio import play_sound
+import pyttsx3
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
