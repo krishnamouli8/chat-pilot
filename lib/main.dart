@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'mqtt_service.dart';
 
 // Replace with your actual Gemini API key
-const String GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY'; // IMPORTANT: Replace with your key
+const String GEMINI_API_KEY = 'AIzaSyCdtsUTq2gk_jvTRQWoLwft0veW5S2BlXo'; // IMPORTANT: Replace with your key
 
 void main() {
   runApp(const RoverControlApp());
@@ -123,7 +123,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   void _initializeGemini() {
     _model = GenerativeModel(
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       apiKey: GEMINI_API_KEY,
     );
   }
@@ -216,16 +216,25 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       // The prompt now asks for the original command text for clarity
       final prompt = '''
-        You are the command interpreter for an autonomous rover.
-        Analyze the following user text and extract a command and any relevant parameters.
-        Respond ONLY with a JSON object.
-        The JSON should have "command" (e.g., "move", "turn", "stop", "status", "scan", "navigate", "forward", "left", "right"), "parameters", and "original_command".
-        For "navigate", the parameters should be "start_location" and "end_location" (e.g., "A", "B").
-        For "forward", "left", "right", and "stop" commands, the parameters field should be an empty object.
-        Example for "forward": {"responseType": "command", "command": "forward", "parameters": {}}
-        Example for "left": {"responseType": "command", "command": "left", "parameters": {}}
-        Example for "right": {"responseType": "command", "command": "right", "parameters": {}}
-        Example for "stop": {"responseType": "command", "command": "stop", "parameters": {}}
+        You are the command interpreter for an autonomous system.
+Analyze the following user text and extract a command and any relevant parameters.
+Respond ONLY with a JSON object.
+
+The JSON should contain:
+
+"responseType" (always "command")
+
+"command" (e.g., "move", "turn", "stop", "status", "scan", "navigate", "forward", "backward", "left", "right")
+
+"parameters"
+
+"original_command" (the user’s original text)
+
+For "navigate", the parameters should include "start_location" and "end_location" (e.g., "A", "B").
+For "forward", "backward", "left", "right", and "stop" commands, the "parameters" field should be an empty object {}.
+For general actions such as "scan", "status", "move", or "turn", include any relevant details or targets in "parameters".
+
+If the command is unclear or cannot be determined, respond with:
         If you cannot determine a valid command, respond with {"command": "unknown", "parameters": {}, "original_command": "$text"}.
         User text: "$text"
       ''';

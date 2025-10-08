@@ -7,7 +7,6 @@ import serial
 import json
 import paho.mqtt.client as mqtt # Import MQTT library
 from playaudio import play_sound
-import pyttsx3
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
@@ -22,6 +21,7 @@ WAYPOINT_REACHED_RADIUS = 1      # For rovers, altitude is 0
 FILE_NAME = "cords.txt" # Changed to cords.txt
 TURN_SPEED = 30
 FORWARD_SPEED = 40
+BACKWARD_SPEED = -40
 forward_sound = "moveforward.wav"
 stop_sound = "stop.wav"
 left_sound = "left.wav"
@@ -48,6 +48,7 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     global path, vehicle
     command_str = msg.payload.decode()
+    command_str = command_str.upper()
     print(f"MQTT_CLIENT::Received command: {command_str}")
 
     if command_str.startswith("NAVIGATE:"):
@@ -89,8 +90,12 @@ def on_message(client, userdata, msg):
         play_sound(stop_sound)
         path = [] # Clear path to prioritize manual control
         motor_control(0, 0)
-    else:
+    elif command_str == "BACKWARD":
         # Handle other commands if necessary
+        #print(f"[System] Other command received: {command_str}")
+        print("[System] Command received: BACKWARD")
+        motor_control(BACKWARD_SPEED, BACKWARD_SPEED)
+    else:
         print(f"[System] Other command received: {command_str}")
 
 # =================== FUNCTIONS ===================
