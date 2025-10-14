@@ -6,7 +6,9 @@ import threading
 import serial
 import json
 import paho.mqtt.client as mqtt # Import MQTT library
+import pyttsx3
 from playaudio import play_sound
+from AStarSearch import a_star
 
 # =================== CONSTANTS ===================
 LIDAR_PORT = '/dev/ttyUSB0'     # Lidar port
@@ -34,6 +36,7 @@ latest_servo1_value = None
 latest_servo3_value = None
 path = []
 location_map = {} # Dictionary to store named locations
+engine = None
 
 ddsm_ser = serial.Serial(DDSM_PORT, baudrate=SERIAL_BAUDRATE)
 ddsm_ser.setRTS(False)
@@ -51,26 +54,26 @@ def on_message(client, userdata, msg):
     command_str = command_str.upper()
     print(f"MQTT_CLIENT::Received command: {command_str}")
 
-    if command_str.startswith("NAVIGATE:"):
-        # Parse navigation command: NAVIGATE:A,C
-        parts = command_str.split(":")[1].split(",")
-        if len(parts) == 2:
-            start_loc_name = parts[0].strip()
-            end_loc_name = parts[1].strip()
+    # if command_str.startswith("NAVIGATE:"):
+    #     # Parse navigation command: NAVIGATE:A,C
+    #     parts = command_str.split(":")[1].split(",")
+    #     if len(parts) == 2:
+    #         start_loc_name = parts[0].strip()
+    #         end_loc_name = parts[1].strip()
 
-            if start_loc_name in location_map and end_loc_name in location_map:
-                # For simplicity, let's assume a direct path for now.
-                # In a real scenario, you'd calculate a path between these points.
-                path = [location_map[start_loc_name], location_map[end_loc_name]]
-                print(f"[System] Navigation command received: from {start_loc_name} to {end_loc_name}")
-                vehicle.simple_goto()
-                # You might want to trigger the navigation loop here or set a flag
-                # For this example, we'll let the main loop pick it up.
-            else:
-                print(f"[Error] Unknown location names: {start_loc_name} or {end_loc_name}")
-        else:
-            print(f"[Error] Invalid NAVIGATE command format: {command_str}")
-    elif command_str == "FORWARD":
+    #         if start_loc_name in location_map and end_loc_name in location_map:
+    #             # For simplicity, let's assume a direct path for now.
+    #             # In a real scenario, you'd calculate a path between these points.
+    #             path = [location_map[start_loc_name], location_map[end_loc_name]]
+    #             print(f"[System] Navigation command received: from {start_loc_name} to {end_loc_name}")
+    #             vehicle.simple_goto()
+    #             # You might want to trigger the navigation loop here or set a flag
+    #             # For this example, we'll let the main loop pick it up.
+    #         else:
+    #             print(f"[Error] Unknown location names: {start_loc_name} or {end_loc_name}")
+    #     else:
+    #         print(f"[Error] Invalid NAVIGATE command format: {command_str}")
+    if command_str == "FORWARD":
         print("[System] Received command: FORWARD")
         path = [] # Clear path to prioritize manual control
         play_sound(forward_sound)
@@ -95,28 +98,30 @@ def on_message(client, userdata, msg):
         #print(f"[System] Other command received: {command_str}")
         print("[System] Command received: BACKWARD")
         motor_control(BACKWARD_SPEED, BACKWARD_SPEED)
-    else:
-        print(f"[System] Other command received: {command_str}")
+    elif command_str.startswith("NAVIGATE"):
+        print(f"{command_str}")
+        # Navigate: A B
+        start = command_str[10]
+        end = command_str[12]
+        path = a_star(start, end)
+        engine.say(f"Navigating from {start} to {end}")
+        # engine.runAndWait()
+        # engine.stop()
+        try:
+            for x in path:
+                target_location = LocationGlobalRelative(x["coords"][0], x["coords"][1], ALTITUDE)
+                goto_position(vehicle, target_location)
+                print(f"[System] Reached waypoint {x["node"]+1} --> {x[0]}, {x[1]}")
+                time.sleep(0.5)
+            print("[System] Reached destination")
+            motor_control(0,0)
+
+        except KeyboardInterrupt:
+            print("[System] Stopping test...")
+            motor_control(0,0)
 
 # =================== FUNCTIONS ===================
 
-def read_coordinates_from_file(filename):
-    coordinates = []
-    with open(filename, 'r') as file:
-        for line in file:
-            line = line.replace(" ", "").strip()
-            if line:
-                try:
-                    name, coords_str = line.split(':')
-                    parts = coords_str.strip().split(',')
-                    if len(parts) >= 2:
-                        lat = float(parts[0])
-                        lon = float(parts[1])
-                        location_map[name.strip()] = (lat, lon) # Store with name
-                        coordinates.append((lat, lon))
-                except ValueError as e:
-                    print(f"Skipping invalid line: {line} - Error: {e}")
-    return coordinates
 
 def get_haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two GPS coordinates in meters"""
@@ -233,7 +238,7 @@ def motor_control(left, right):
 # =================== MAIN ===================
 
 def main():
-    global latest_scan, path, location_map, vehicle
+    global latest_scan, path, location_map, vehicle, engine
 
     # Initialize MQTT Client
     client = mqtt.Client()
@@ -241,8 +246,9 @@ def main():
     client.on_message = on_message
     client.connect("13.232.191.178", 1883, 60) # Connect to public broker
     client.loop_start() # Start MQTT loop in background thread
+    engine = pyttsx3.init()
 
-    read_coordinates_from_file(FILE_NAME) # Populate location_map
+    # read_coordinates_from_file(FILE_NAME) # Populate location_map
     print(f"[System] Loaded named locations: {location_map.keys()}")
 
     # print("[System] Starting LIDAR...")
